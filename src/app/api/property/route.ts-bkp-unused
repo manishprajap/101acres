@@ -1,0 +1,287 @@
+///add property via web
+import { writeFile, access, mkdir, constants, chmod } from "fs/promises";
+import path from "path";
+import { v4 as uuidv4 } from "uuid";
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/db/db";
+import { properties, userPlans, plans } from "@/db/schema";
+import { eq, desc, and, sql } from "drizzle-orm";
+import { corsHeaders } from "@/lib/cors";
+
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+export async function OPTIONS(req: NextRequest) {
+  const origin = req.headers.get("origin");
+  return new NextResponse(null, { status: 204, headers: corsHeaders(origin) });
+}
+
+const uploadsDir = path.join(process.cwd(), "uploads");
+const allowedImageTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+const maxSizeInBytes = 10 * 1024 * 1024;
+
+async function ensureUploadsFolderExists() {
+  try {
+    await access(uploadsDir, constants.F_OK);
+  } catch {
+    await mkdir(uploadsDir, { recursive: true });
+    await chmod(uploadsDir, 0o777);
+    console.log("✅ uploads/ directory created");
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const formData = await req.formData();
+
+    // ── Required Fields ───────────────────────────────────────────────────
+    const requiredFields = [
+      "title",
+      "squareFt",
+      "price",
+      "propertyLocation",
+      "propertyFor",
+      "contactName",
+      "contactNumber",
+      "slug",
+    ];
+
+    // ── Optional Fields ───────────────────────────────────────────────────
+    const optionalFields = [
+      // Basic
+      "propertyType",
+      "residentialType",
+      "description",
+      "beds",
+      "baths",
+      "priceFor",
+      "countryId",
+      "stateId",
+      "cityId",
+      "areaId",
+      "area",
+      "landmark",
+      "address",
+      "googleLocation",
+      "contactEmail",
+      "isBankProperty",
+      "bankPropertyType",
+      "customBankType",
+      "paymentstatus",
+      "paymentType",
+      "premium",
+      "amount",
+      "isDeleted",
+      "remark",
+    ];
+
+    const data: Record<string, string> = {};
+
+    // Validate required fields
+    for (const field of requiredFields) {
+      const value = formData.get(field)?.toString().trim();
+      if (!value) {
+        return NextResponse.json(
+          { success: false, message: `Missing required field: ${field}` },
+          { status: 400 }
+        );
+      }
+      data[field] = value;
+    }
+
+    // Collect optional fields
+    for (const field of optionalFields) {
+      data[field] = formData.get(field)?.toString().trim() || "";
+    }
+
+    const userId = formData.get("userId")?.toString();
+    const role = formData.get("role")?.toString();
+    if (!userId || !role) {
+      return NextResponse.json(
+        { success: false, message: "User ID or role missing" },
+        { status: 400 }
+      );
+    }
+
+    // ── Plan-based listing limit & expiry check (user / agent only — admin bypasses) ──
+    if (role !== "admin") {
+      const [activePlan] = await db
+        .select()
+        .from(userPlans)
+        .where(
+          and(eq(userPlans.user_id, parseInt(userId)), eq(userPlans.status, "active"))
+        )
+        .orderBy(desc(userPlans.id))
+        .limit(1);
+
+      if (!activePlan) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "No active plan found. Please subscribe to a plan before adding a property.",
+          },
+          { status: 403 }
+        );
+      }
+
+      if (activePlan.expiry_date && new Date(activePlan.expiry_date) < new Date()) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Your plan has expired. Please renew your plan to add more properties.",
+          },
+          { status: 403 }
+        );
+      }
+
+      const [planDef] = await db
+        .select()
+        .from(plans)
+        .where(eq(plans.id, activePlan.plan_id));
+
+      if (planDef?.listingLimit != null) {
+        const [{ count }] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(properties)
+          .where(
+            and(eq(properties.user_id, parseInt(userId)), eq(properties.isDeleted, false))
+          );
+
+        if (Number(count) >= planDef.listingLimit) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: `Listing limit reached for your ${planDef.name} plan (${planDef.listingLimit} listings). Please upgrade to add more properties.`,
+            },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
+    const status = role === "admin" ? "Active" : "Inactive";
+
+    await ensureUploadsFolderExists();
+
+    // ── Handle Image Uploads ──────────────────────────────────────────────
+    const images = formData.getAll("images") as File[];
+    const imagePaths: string[] = [];
+
+    for (const image of images) {
+      if (!allowedImageTypes.includes(image.type)) {
+        return NextResponse.json(
+          { success: false, message: `Invalid image type: ${image.type}` },
+          { status: 400 }
+        );
+      }
+
+      const buffer = Buffer.from(await image.arrayBuffer());
+      if (buffer.length > maxSizeInBytes) {
+        return NextResponse.json(
+          { success: false, message: "Image size exceeds 10MB" },
+          { status: 400 }
+        );
+      }
+
+      const extension = path.extname(image.name) || ".jpg";
+      const filename = `${uuidv4()}${extension}`;
+      const filepath = path.join(uploadsDir, filename);
+
+      await writeFile(filepath, buffer);
+      await chmod(filepath, 0o777);
+
+      imagePaths.push(filename);
+    }
+
+    // ── Insert into DB ────────────────────────────────────────────────────
+    const result = await db.insert(properties).values({
+      user_id: parseInt(userId),
+
+      // Contact
+      contactName: data.contactName || null,
+      contactNumber: data.contactNumber || null,
+      contactEmail: data.contactEmail || null,
+
+      // Basic Info
+      title: data.title,
+      propertyLocation: data.propertyLocation,
+      propertyFor: data.propertyFor,
+      propertyType: data.propertyType || null,
+      residentialType: data.residentialType || null,
+      description: data.description || null,
+
+      // Size & Details
+      squareFt: parseInt(data.squareFt),
+      beds: data.beds ? parseInt(data.beds) : null,
+      baths: data.baths ? parseInt(data.baths) : null,
+
+      // Pricing
+      price: data.price,
+      priceFor: data.priceFor || null,
+
+      // Location
+      country: data.countryId ? parseInt(data.countryId) : null,
+      state: data.stateId ? parseInt(data.stateId) : null,
+      city: data.cityId ? parseInt(data.cityId) : null,
+      area: data.areaId ? parseInt(data.areaId) : null,
+      landmark: data.landmark || null,
+      address: data.address || null,
+      googleLocation: data.googleLocation || null,
+      slug: data.slug,
+
+      // Bank Property
+      isBankProperty: data.isBankProperty || "no",
+      bankPropertyType: data.bankPropertyType || null,
+      customBankType: data.customBankType || null,
+
+      // Media
+      image: JSON.stringify(imagePaths),
+
+      // System
+      status,
+      paymentstatus: data.paymentstatus || "free",
+      premium: data.premium === "true",
+      paymentType: data.paymentType || "cash",
+      amount: data.amount ? parseInt(data.amount) : 0,
+      isDeleted: data.isDeleted === "true",
+      remark: data.remark || null,
+    });
+
+    return NextResponse.json({ success: true, result, imagePaths });
+  } catch (error) {
+    console.error("Upload failed:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Upload failed",
+        error: (error as Error)?.message || "Unknown error",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET(req: NextRequest) {
+  const origin = req.headers.get("origin");
+
+  try {
+    const allProperties = await db
+      .select()
+      .from(properties)
+      .where(eq(properties.premium, false))
+      .orderBy(desc(properties.id));
+
+    return NextResponse.json(
+      { success: true, data: allProperties },
+      { headers: corsHeaders(origin) }
+    );
+  } catch (error) {
+    console.error("Drizzle select error:", error);
+    return NextResponse.json(
+      { success: false, message: "Failed to fetch properties" },
+      { status: 500, headers: corsHeaders(origin) }
+    );
+  }
+}

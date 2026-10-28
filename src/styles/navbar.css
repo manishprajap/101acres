@@ -1,0 +1,6 @@
+#topnav .navigation-menu > li {
+    margin-inline: 0 !important;
+    margin-block: calc(var(--spacing) * 0);
+    display: block;
+    position: relative;
+}

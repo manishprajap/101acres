@@ -1,0 +1,56 @@
+/* Template Name: Hously - Tailwind CSS Real Estate Landing & Admin Dashboard Template
+   Author: Shreethemes
+   Email: support@shreethemes.in
+   Website: https://shreethemes.in
+   Version: 2.5.0
+   Created: June 2022
+   File: Main Css File
+*/
+
+/* Fonts */
+@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@100..900&display=swap');
+
+/* Tailwind CSS */
+@import "tailwindcss";
+
+/* Dark mode */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Theme */
+@theme {
+   --font-league: "League Spartan", "serif";
+
+   --breakpoint-xs: 540px;
+   --breakpoint-sm: 640px;
+   --breakpoint-md: 720px;
+   --breakpoint-lg: 960px;
+   --breakpoint-xl: 1140px;
+   --breakpoint-2xl: 1140px;
+
+   --text-base: 17px;
+   --text-base--line-height: 24px;
+
+   --shadow-xs: 0 2px 4px 0 rgb(0 0 0 / 0.1);
+   --shadow-sm: 0 0 3px rgb(0 0 0 / 0.1);
+   --shadow-md: 0 5px 13px rgb(0 0 0 / 0.1);
+   --shadow-lg: 0 10px 25px -3px rgb(0 0 0 / 0.1);
+   --shadow-testi: 2px 2px 2px -1px rgb(0 0 0 / 0.1);
+
+   --z-1: 1;
+   --z-2: 2;
+   --z-3: 3;
+   --z-999: 999;
+}
+
+/* Custom */
+@import "./custom/_general.css";
+@import "./custom/pages/_helper.css";
+@import "./custom/structure/_topnav.css";
+@import "./custom/structure/_footer.css";
+@import "./components/_buttons.css";
+@import "./custom/pages/_hero.css";
+@import "./custom/pages/_countdown.css";
+@import "./custom/pages/_contact.css";
+@import "./custom/pages/_swiper-slider.css";
+@import "./custom/pages/_testi.css";
+@import "./custom/pages/_choices.css";

@@ -1,0 +1,36 @@
+import path from "path";
+
+/**
+ * Sabhi property images yahin save hongi.
+ * Chaho to .env mein UPLOAD_DIR set karke override kar sakte ho
+ * (Linux server par deploy karo to zaroor karna, kyunki "D:\" wahan nahi hota).
+ */
+export const UPLOAD_DIR =
+  process.env.UPLOAD_DIR || "/var/www/html/101acres/uploads";
+
+/** Database mein jo URL store hoga uska prefix */
+export const UPLOAD_URL_PREFIX = "/api/uploads";
+
+export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+export const MAX_PHOTOS = 50;
+
+export const MIME_BY_EXT: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+};
+
+/** Path traversal se bachne ke liye filename validate karta hai */
+export function resolveUploadPath(filename: string): string | null {
+  const safe = path.basename(filename);
+
+  if (safe !== filename || !/^[a-zA-Z0-9._-]+$/.test(safe)) {
+    return null;
+  }
+
+  return path.join(UPLOAD_DIR, safe);
+}

@@ -1,0 +1,1213 @@
+"use client";
+import Image from "next/image";
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Wrapper from "../components/wrapper";
+
+type Country = { id: number; name: string };
+type State = { id: number; name: string };
+type City = { id: number; name: string };
+type Area = { id: number; name: string };
+
+const TOTAL_STEPS = 8;
+
+const STEP_META = [
+  { step: 1, label: "Mobile", icon: "📱" },
+  { step: 2, label: "Location", icon: "📍" },
+  { step: 3, label: "Sell/Rent", icon: "🏠" },
+  { step: 4, label: "Type", icon: "🏢" },
+  { step: 5, label: "Price", icon: "💰" },
+  { step: 6, label: "Area", icon: "📐" },
+  { step: 7, label: "Media", icon: "📸" },
+  { step: 8, label: "Publish", icon: "✅" },
+];
+
+export default function AddProperty() {
+  const router = useRouter();
+  const [successMessage, setSuccessMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [countriesList, setCountriesList] = useState<Country[]>([]);
+  const [states, setStates] = useState<State[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [role, setRole] = useState<string | null>(null);
+  const [userId, setUserId] = useState("");
+
+  const [showPopup, setShowPopup] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState("");
+
+  // ---- Wizard state ----
+  const [currentStep, setCurrentStep] = useState(1);
+  const [stepError, setStepError] = useState("");
+
+  // ---- Payment / Scan & Pay details ----
+  const PAYMENT_DETAILS = {
+    accountName: "101ACRES.COM",
+    accountNumber: "8054278341",
+    bankName: "Indian Bank",
+    ifscCode: "IDIB000M175",
+    branch: "IND MSME BRANCH NEW DELHI, INDER ENCLAVE, NEW DELHI 110087",
+    upiId: "101acrescom@indianbk",
+    whatsappNumber: "919217703975", // country code + number, no + or spaces
+  };
+
+  const upiPayString = `upi://pay?pa=${PAYMENT_DETAILS.upiId}&pn=${encodeURIComponent(
+    PAYMENT_DETAILS.accountName
+  )}`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+    upiPayString
+  )}`;
+
+  const whatsappShareUrl = `https://wa.me/${PAYMENT_DETAILS.whatsappNumber}?text=${encodeURIComponent(
+    "Hi, I have submitted a property listing and am sharing the payment screenshot."
+  )}`;
+
+  const [formData, setFormData] = useState({
+    // Step 1
+    listingType: "", // Owner | Dealer | Builder
+    contactName: "",
+    contactNumber: "",
+    contactEmail: "",
+
+    // Step 2
+    propertyLocation: "",
+    country: "",
+    countryId: "",
+    state: "",
+    stateId: "",
+    city: "",
+    cityId: "",
+    area: "",
+    areaId: "",
+    landmark: "",
+    address: "",
+    googleLocation: "",
+    slug: "",
+
+    // Step 3
+    propertyFor: "",
+    priceFor: "",
+
+    // Step 4
+    propertyType: "",
+    residentialType: "",
+    title: "",
+    description: "",
+    isBankProperty: "no",
+    bankPropertyType: "",
+    customBankType: "",
+
+    // Step 5
+    price: "",
+
+    // Step 6
+    squareFt: "",
+    beds: "",
+    baths: "",
+  });
+
+  const capitalizeWords = (str: string) =>
+    str
+      .toLowerCase()
+      .trim()
+      .split(/\s+/)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+
+  const getCapitalizedFormData = () => {
+    const newData: typeof formData = { ...formData };
+    const skipFields = ["amenities", "googleLocation", "metaDescription", "description", "contactEmail"];
+    Object.entries(newData).forEach(([key, value]) => {
+      if (typeof value === "string" && !skipFields.includes(key)) {
+        newData[key as keyof typeof formData] = capitalizeWords(value) as any;
+      }
+    });
+    return newData;
+  };
+
+  const handleChanges = async (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+
+    if (name === "countryId") {
+      const selectedCountry = countriesList.find((c) => c.id.toString() === value);
+      setFormData((prev) => ({
+        ...prev,
+        countryId: value,
+        country: selectedCountry?.name || "",
+        stateId: "",
+        state: "",
+        cityId: "",
+        city: "",
+        area: "",
+        areaId: "",
+      }));
+      try {
+        const res = await fetch(`/api/states?countryId=${value}`);
+        const data = await res.json();
+        setStates(data || []);
+        setCities([]);
+      } catch (err) {
+        console.error("Failed to fetch states", err);
+      }
+      return;
+    }
+
+    if (name === "stateId") {
+      const selectedState = states.find((s) => s.id.toString() === value);
+      setFormData((prev) => ({
+        ...prev,
+        stateId: value,
+        state: selectedState?.name || "",
+        cityId: "",
+        city: "",
+        area: "",
+        areaId: "",
+      }));
+      try {
+        const res = await fetch(`/api/cities?stateId=${value}`);
+        const data = await res.json();
+        setCities(data || []);
+      } catch (err) {
+        console.error("Failed to fetch cities", err);
+      }
+      return;
+    }
+
+    if (name === "areaId") {
+      const selectedArea = areas.find((a) => a.id.toString() === value);
+      setFormData((prev) => ({
+        ...prev,
+        areaId: value,
+        area: selectedArea?.name || "",
+      }));
+      return;
+    }
+
+    if (name === "cityId") {
+      const selectedCity = cities.find((c) => c.id.toString() === value);
+      const cityName = selectedCity?.name || "";
+      setFormData((prev) => ({
+        ...prev,
+        cityId: value,
+        city: selectedCity?.name || "",
+        slug: generateSlug(cityName),
+        area: "",
+        areaId: "",
+      }));
+      try {
+        const response = await fetch(`/api/area?cityId=${value}`);
+        if (!response.ok) throw new Error("Failed to fetch areas");
+        const data: Area[] = await response.json();
+        setAreas(data);
+      } catch (error) {
+        console.error("Error fetching areas:", error);
+        setAreas([]);
+      }
+      return;
+    }
+
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const generateSlug = (text: string) =>
+    text.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^\w\-]+/g, "").replace(/\-\-+/g, "-");
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (selectedFiles) {
+      const fileList = Array.from(selectedFiles);
+      setFiles(fileList);
+      setPreviewUrls(
+        fileList.map((file) =>
+          file.type.startsWith("video/") ? "" : URL.createObjectURL(file)
+        )
+      );
+    }
+  };
+
+  const removeFile = (idx: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== idx));
+    setPreviewUrls((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  useEffect(() => {
+    const storedUserId = localStorage.getItem("userId");
+    const storedRole = localStorage.getItem("role");
+    if (storedUserId && storedRole) {
+      setUserId(storedUserId);
+      setRole(storedRole);
+    } else {
+      router.push("/auth-login");
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/country")
+      .then((res) => res.json())
+      .then((data) => setCountriesList(data || []))
+      .catch((error) => console.error("Error fetching countries:", error));
+
+    const message = localStorage.getItem("PropertySuccess");
+    if (message) {
+      setSuccessMessage(message);
+      localStorage.removeItem("PropertySuccess");
+    }
+  }, []);
+
+  // ---------- Step validation ----------
+  const validateStep = (step: number): string => {
+    switch (step) {
+      case 1:
+        if (!formData.listingType) return "Please select whether you are an Owner, Dealer, or Builder.";
+        if (!formData.contactName.trim()) return "Please enter your name.";
+        if (!formData.contactNumber.trim()) return "Please enter your mobile number.";
+        if (!/^\d{10}$/.test(formData.contactNumber.trim())) return "Please enter a valid 10-digit mobile number.";
+        return "";
+      case 2:
+        if (!formData.propertyLocation) return "Please select property location type (National/International).";
+        if (!formData.countryId) return "Please select a country.";
+        return "";
+      case 3:
+        if (!formData.propertyFor) return "Please select Sell or Rent.";
+        return "";
+      case 4:
+        if (!formData.propertyType) return "Please select a property type.";
+        if (!formData.title.trim()) return "Please enter a property title.";
+        return "";
+      case 5:
+        if (!formData.price || Number(formData.price) <= 0) return "Please enter a valid price.";
+        return "";
+      case 6:
+        if (!formData.squareFt || Number(formData.squareFt) <= 0) return "Please enter the property area in sq. ft.";
+        return "";
+      case 7:
+        if (files.length === 0) return "Please upload at least one photo of the property.";
+        return "";
+      default:
+        return "";
+    }
+  };
+
+  const goNext = () => {
+    const error = validateStep(currentStep);
+    if (error) {
+      setStepError(error);
+      return;
+    }
+    setStepError("");
+    setCurrentStep((prev) => Math.min(prev + 1, TOTAL_STEPS));
+  };
+
+  const goBack = () => {
+    setStepError("");
+    setCurrentStep((prev) => Math.max(prev - 1, 1));
+  };
+
+  const goToStep = (step: number) => {
+    // Only allow jumping to a step that has already been reached/validated
+    if (step < currentStep) {
+      setStepError("");
+      setCurrentStep(step);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // final guard - validate all steps before submit
+    for (let s = 1; s <= 7; s++) {
+      const error = validateStep(s);
+      if (error) {
+        setStepError(error);
+        setCurrentStep(s);
+        return;
+      }
+    }
+
+    setLoading(true);
+
+    try {
+      const form = new FormData();
+
+      if (!userId) {
+        alert("User ID not found. Please log in again.");
+        setLoading(false);
+        return;
+      }
+      form.append("userId", userId);
+
+      if (!role) {
+        alert("Role not found. Please log in again.");
+        setLoading(false);
+        return;
+      }
+      form.append("role", role);
+
+      if (role === "admin") {
+        form.append("status", "Active");
+      }
+
+      const capitalizedData = getCapitalizedFormData();
+      Object.entries(capitalizedData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          form.append(key, value.toString());
+        }
+      });
+
+      if (!formData.slug) {
+        const slugBase = formData.city || formData.title || "property";
+        form.set("slug", generateSlug(slugBase));
+      }
+
+      files.forEach((file) => form.append("images", file));
+
+      const res = await fetch("/api/property", { method: "POST", body: form });
+      const data = await res.json();
+
+      if (res.ok) {
+        localStorage.setItem("PropertySuccess", "Property added successfully!");
+
+        let url = "/dashboard";
+        if (role === "admin") url = "/dashboard/PropertyListPage";
+        else if (role === "agent") url = "/dashboard/agentProperty";
+        else if (role === "user") url = "/dashboard/userProperty";
+
+        setRedirectUrl(url);
+        setLoading(false);
+        setShowPopup(true);
+        return;
+      } else {
+        alert(data.message || "Failed to add property");
+      }
+    } catch (error) {
+      alert("Something went wrong.");
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen text-white bg-transparent">
+        <div className="loader ease-linear rounded-full border-8 border-t-8 border-gray-200 h-20 w-20"></div>
+        <style>{`
+          .loader { border-top-color: rgb(110, 189, 36); animation: spin 1s linear infinite; }
+          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        `}</style>
+      </div>
+    );
+  }
+
+  // ---------- UI helpers ----------
+  const Stepper = () => (
+    <div className="mb-6">
+      <div className="flex items-center justify-between overflow-x-auto pb-2">
+        {STEP_META.map((s, idx) => {
+          const isActive = s.step === currentStep;
+          const isDone = s.step < currentStep;
+          return (
+            <React.Fragment key={s.step}>
+              <button
+                type="button"
+                onClick={() => goToStep(s.step)}
+                className="flex flex-col items-center min-w-[64px] focus:outline-none"
+              >
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold transition-colors
+                    ${isActive ? "bg-green-600 text-white" : isDone ? "bg-green-100 text-green-700 border border-green-500" : "bg-gray-100 dark:bg-slate-800 text-slate-400 border border-gray-300 dark:border-gray-700"}`}
+                >
+                  {isDone ? "✓" : s.icon}
+                </div>
+                <span
+                  className={`text-[11px] mt-1 whitespace-nowrap ${
+                    isActive ? "text-green-600 font-medium" : "text-slate-400"
+                  }`}
+                >
+                  {s.label}
+                </span>
+              </button>
+              {idx < STEP_META.length - 1 && (
+                <div
+                  className={`flex-1 h-[2px] mx-1 ${
+                    s.step < currentStep ? "bg-green-500" : "bg-gray-200 dark:bg-gray-700"
+                  }`}
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+      <p className="text-xs text-slate-400 mt-1">
+        Step {currentStep} of {TOTAL_STEPS}
+      </p>
+    </div>
+  );
+
+  const NavButtons = ({ isLastStep = false }: { isLastStep?: boolean }) => (
+    <div className="flex items-center justify-between mt-6">
+      <button
+        type="button"
+        onClick={goBack}
+        disabled={currentStep === 1}
+        className={`btn rounded-md px-4 py-2 border ${
+          currentStep === 1
+            ? "opacity-40 cursor-not-allowed border-gray-300"
+            : "border-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800"
+        }`}
+      >
+        ← Back
+      </button>
+
+      {!isLastStep ? (
+        <button
+          type="button"
+          onClick={goNext}
+          className="btn bg-green-600 hover:bg-green-700 border-green-600 hover:border-green-700 text-white rounded-md px-5 py-2"
+        >
+          Next →
+        </button>
+      ) : (
+        <button
+          type="submit"
+          disabled={loading}
+          className={`btn flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 border-green-600 hover:border-green-700 text-white rounded-md px-5 py-2 ${
+            loading ? "opacity-75 cursor-not-allowed" : ""
+          }`}
+        >
+          {loading ? "Publishing..." : "🚀 Publish Property"}
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <Wrapper>
+      <div className="container-fluid relative px-3">
+        <div className="layout-specing">
+          <div className="md:flex justify-between items-center">
+            <h5 className="text-lg font-semibold">Add Property</h5>
+            <ul className="tracking-[0.5px] inline-block sm:mt-0 mt-3">
+              <li className="inline-block capitalize text-[16px] font-medium duration-500 dark:text-white/70 hover:text-green-600 dark:hover:text-white">
+                <Link href="/">101Acres</Link>
+              </li>
+              <li className="inline-block text-base text-slate-950 dark:text-white/70 mx-0.5">
+                <i className="mdi mdi-chevron-right"></i>
+              </li>
+              <li
+                className="inline-block capitalize text-[16px] font-medium text-green-600 dark:text-white"
+                aria-current="page"
+              >
+                Add Property
+              </li>
+            </ul>
+          </div>
+
+          {successMessage && (
+            <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-md">{successMessage}</div>
+          )}
+
+          <div className="container relative">
+            <div className="grid md:grid-cols-1 grid-cols-1 gap-6 mt-6">
+              <div className="rounded-md shadow-sm shadow-gray-200 dark:shadow-gray-700 p-6 bg-white dark:bg-slate-900 h-fit w-full">
+                <Stepper />
+
+                {stepError && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-md text-sm">
+                    {stepError}
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit}>
+                  {/* ---------------- STEP 1: MOBILE / CONTACT / LISTING TYPE ---------------- */}
+                  {currentStep === 1 && (
+                    <div className="grid grid-cols-12 gap-5">
+                      <div className="col-span-12">
+                        <h6 className="text-base font-semibold text-green-600 mb-1">
+                          📱 Let's get started — who's posting?
+                        </h6>
+                        <p className="text-sm text-slate-400 mb-3">
+                          Select what best describes you.
+                        </p>
+                        <div className="grid grid-cols-3 gap-3">
+                          {["Owner", "Dealer", "Builder"].map((type) => (
+                            <button
+                              type="button"
+                              key={type}
+                              onClick={() => setFormData((prev) => ({ ...prev, listingType: type }))}
+                              className={`rounded-md border-2 py-3 text-center font-medium transition-colors ${
+                                formData.listingType === type
+                                  ? "border-green-600 bg-green-50 text-green-700 dark:bg-green-900/20"
+                                  : "border-gray-300 dark:border-gray-700 hover:border-green-400"
+                              }`}
+                            >
+                              {type === "Owner" && "🏡 "}
+                              {type === "Dealer" && "🤝 "}
+                              {type === "Builder" && "🏗️ "}
+                              {type}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-6 col-span-12">
+                        <label className="font-medium">
+                          Name: <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          name="contactName"
+                          value={formData.contactName}
+                          onChange={handleChanges}
+                          type="text"
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                          placeholder="Enter Name"
+                        />
+                      </div>
+
+                      <div className="md:col-span-6 col-span-12">
+                        <label className="font-medium">
+                          Mobile Number: <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          name="contactNumber"
+                          value={formData.contactNumber}
+                          onChange={handleChanges}
+                          type="tel"
+                          maxLength={10}
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                          placeholder="10-digit mobile number"
+                        />
+                      </div>
+
+                      <div className="col-span-12">
+                        <label className="font-medium">Email Id (optional):</label>
+                        <input
+                          name="contactEmail"
+                          value={formData.contactEmail}
+                          onChange={handleChanges}
+                          type="email"
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                          placeholder="Enter Email"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ---------------- STEP 2: LOCATION ---------------- */}
+                  {currentStep === 2 && (
+                    <div className="grid grid-cols-12 gap-5">
+                      <div className="col-span-12">
+                        <h6 className="text-base font-semibold text-green-600 mb-1">📍 Where is the property?</h6>
+                      </div>
+
+                      <div className="md:col-span-6 col-span-12">
+                        <label className="font-medium">
+                          Property Location: <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          name="propertyLocation"
+                          value={formData.propertyLocation}
+                          onChange={handleChanges}
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                        >
+                          <option value="">Select</option>
+                          <option value="National">National</option>
+                          <option value="International">International</option>
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-6 col-span-12">
+                        <label className="font-medium">
+                          Country: <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          name="countryId"
+                          value={formData.countryId}
+                          onChange={handleChanges}
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                        >
+                          <option value="">Select Country</option>
+                          {countriesList.map((country) => (
+                            <option key={country.id} value={country.id}>
+                              {country.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-4 col-span-12">
+                        <label className="font-medium">State:</label>
+                        <select
+                          name="stateId"
+                          value={formData.stateId}
+                          onChange={handleChanges}
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                        >
+                          <option value="">Select State</option>
+                          {states.map((state) => (
+                            <option key={state.id} value={state.id}>
+                              {state.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-4 col-span-12">
+                        <label className="font-medium">City:</label>
+                        <select
+                          name="cityId"
+                          value={formData.cityId}
+                          onChange={handleChanges}
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                        >
+                          <option value="">Select City</option>
+                          {cities.map((city) => (
+                            <option key={city.id} value={city.id}>
+                              {city.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-4 col-span-12">
+                        <label className="font-medium">Area:</label>
+                        <select
+                          name="areaId"
+                          value={formData.areaId}
+                          onChange={handleChanges}
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                        >
+                          <option value="">Select Area</option>
+                          {areas.map((area) => (
+                            <option key={area.id} value={area.id}>
+                              {area.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-6 col-span-12">
+                        <label className="font-medium">Landmark:</label>
+                        <input
+                          name="landmark"
+                          value={formData.landmark}
+                          onChange={handleChanges}
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                          placeholder="Nearby Landmark"
+                        />
+                      </div>
+
+                      <div className="md:col-span-6 col-span-12">
+                        <label className="font-medium">Google Location:</label>
+                        <input
+                          name="googleLocation"
+                          value={formData.googleLocation}
+                          onChange={handleChanges}
+                          placeholder="Paste Google Maps link"
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                        />
+                      </div>
+
+                      <div className="col-span-12">
+                        <label className="font-medium">Address:</label>
+                        <textarea
+                          name="address"
+                          value={formData.address}
+                          onChange={handleChanges}
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2 w-full"
+                          placeholder="Full Address"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ---------------- STEP 3: SELL / RENT ---------------- */}
+                  {currentStep === 3 && (
+                    <div className="grid grid-cols-12 gap-5">
+                      <div className="col-span-12">
+                        <h6 className="text-base font-semibold text-green-600 mb-1">🏠 Sell or Rent?</h6>
+                      </div>
+
+                      <div className="col-span-12">
+                        <div className="grid grid-cols-2 gap-4">
+                          {["Sale", "Rent"].map((opt) => (
+                            <button
+                              type="button"
+                              key={opt}
+                              onClick={() => setFormData((prev) => ({ ...prev, propertyFor: opt }))}
+                              className={`rounded-md border-2 py-6 text-center text-lg font-semibold transition-colors ${
+                                formData.propertyFor === opt
+                                  ? "border-green-600 bg-green-50 text-green-700 dark:bg-green-900/20"
+                                  : "border-gray-300 dark:border-gray-700 hover:border-green-400"
+                              }`}
+                            >
+                              {opt === "Sale" ? "💵 For Sale" : "🔑 For Rent"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-6 col-span-12">
+                        <label className="font-medium">Price For:</label>
+                        <select
+                          name="priceFor"
+                          value={formData.priceFor}
+                          onChange={handleChanges}
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                        >
+                          <option value="">Select</option>
+                          <option value="Monthly">Monthly</option>
+                          <option value="Yearly">Yearly</option>
+                          <option value="Total">Total (One Time)</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ---------------- STEP 4: PROPERTY TYPE ---------------- */}
+                  {currentStep === 4 && (
+                    <div className="grid grid-cols-12 gap-5">
+                      <div className="col-span-12">
+                        <h6 className="text-base font-semibold text-green-600 mb-1">🏢 Tell us about the property</h6>
+                      </div>
+
+                      <div className="md:col-span-6 col-span-12">
+                        <label className="font-medium">
+                          Title: <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          name="title"
+                          value={formData.title}
+                          onChange={handleChanges}
+                          type="text"
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                          placeholder="Property Title"
+                        />
+                      </div>
+
+                      <div className="md:col-span-6 col-span-12">
+                        <label className="font-medium">
+                          Property Type: <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          name="propertyType"
+                          value={formData.propertyType}
+                          onChange={handleChanges}
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2 w-full"
+                        >
+                          <option value="">Select Type</option>
+                          <option value="Commercial">Commercial</option>
+                          <option value="Residential">Residential</option>
+                        </select>
+                      </div>
+
+                      {formData.propertyType === "Residential" && (
+                        <div className="md:col-span-6 col-span-12">
+                          <label className="font-medium">Residential Type:</label>
+                          <select
+                            name="residentialType"
+                            value={formData.residentialType}
+                            onChange={handleChanges}
+                            className="form-input border !border-gray-500 dark:!border-gray-800 mt-2 w-full"
+                          >
+                            <option value="">Select Residential Type</option>
+                            <option value="House">House</option>
+                            <option value="Flat">Flat</option>
+                            <option value="Farm House">Farm House</option>
+                            <option value="Land">Khali Land / Plot</option>
+                            <option value="Villa">Villa</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {formData.propertyType === "Commercial" && (
+                        <div className="md:col-span-6 col-span-12">
+                          <label className="font-medium">Commercial Type:</label>
+                          <select
+                            name="residentialType"
+                            value={formData.residentialType}
+                            onChange={handleChanges}
+                            className="form-input border !border-gray-500 dark:!border-gray-800 mt-2 w-full"
+                          >
+                            <option value="">Select Commercial Type</option>
+                            <option value="Shop">Shop</option>
+                            <option value="Office">Office</option>
+                            <option value="Hotel">Hotel</option>
+                            <option value="Land">Commercial Land</option>
+                            <option value="Marriage Lawn">Marriage Lawn</option>
+                            <option value="Warehouse">Warehouse</option>
+                            <option value="Showroom">Showroom</option>
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="col-span-12">
+                        <label className="font-medium">Property Description:</label>
+                        <textarea
+                          name="description"
+                          value={formData.description}
+                          onChange={handleChanges}
+                          rows={4}
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2 w-full"
+                          placeholder="Describe your property in detail..."
+                        />
+                      </div>
+
+                      <div className="col-span-12 border-t border-gray-200 dark:border-gray-700 pt-4 mt-2">
+                        <p className="font-medium mb-2 text-sm text-slate-500">Bank Property (optional)</p>
+                        <div className="grid grid-cols-12 gap-5">
+                          <div className="md:col-span-4 col-span-12">
+                            <label className="font-medium block mb-1">Bank Property:</label>
+                            <select
+                              name="isBankProperty"
+                              value={formData.isBankProperty}
+                              onChange={(e) =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  isBankProperty: e.target.value,
+                                  ...(e.target.value === "no"
+                                    ? { bankPropertyType: "", customBankType: "" }
+                                    : {}),
+                                }))
+                              }
+                              className="form-input border !border-gray-500 dark:!border-gray-800 rounded-md px-3 py-1.5 text-sm w-full"
+                            >
+                              <option value="no">No</option>
+                              <option value="yes">Yes</option>
+                            </select>
+                          </div>
+
+                          {formData.isBankProperty === "yes" && (
+                            <>
+                              <div className="md:col-span-4 col-span-12">
+                                <label className="font-medium block mb-1">Bank Property Type:</label>
+                                <select
+                                  name="bankPropertyType"
+                                  value={formData.bankPropertyType}
+                                  onChange={handleChanges}
+                                  className="form-input border !border-gray-500 dark:!border-gray-800 rounded-md px-3 py-1.5 text-sm w-full"
+                                >
+                                  <option value="">Select</option>
+                                  <option value="Bank Auction Property">Bank Auction Property</option>
+                                  <option value="Distressed Property">Distressed Property</option>
+                                </select>
+                              </div>
+
+                              <div className="md:col-span-4 col-span-12">
+                                <label className="font-medium block mb-1">Enter Custom Bank Type:</label>
+                                <input
+                                  type="text"
+                                  name="customBankType"
+                                  value={formData.customBankType}
+                                  onChange={handleChanges}
+                                  placeholder="Enter bank name or type"
+                                  className="form-input border !border-gray-500 dark:!border-gray-800 rounded-md px-3 py-1.5 text-sm w-full"
+                                />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ---------------- STEP 5: PRICE ---------------- */}
+                  {currentStep === 5 && (
+                    <div className="grid grid-cols-12 gap-5">
+                      <div className="col-span-12">
+                        <h6 className="text-base font-semibold text-green-600 mb-1">💰 What's the price?</h6>
+                      </div>
+                      <div className="md:col-span-6 col-span-12">
+                        <label className="font-medium">
+                          Price (₹): <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          name="price"
+                          value={formData.price}
+                          onChange={handleChanges}
+                          type="number"
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2 text-xl font-semibold"
+                          placeholder="Enter Price"
+                        />
+                        {formData.priceFor && (
+                          <p className="text-xs text-slate-400 mt-1">Billing: {formData.priceFor}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ---------------- STEP 6: AREA / SIZE ---------------- */}
+                  {currentStep === 6 && (
+                    <div className="grid grid-cols-12 gap-5">
+                      <div className="col-span-12">
+                        <h6 className="text-base font-semibold text-green-600 mb-1">📐 Property size</h6>
+                      </div>
+
+                      <div className="md:col-span-4 col-span-12">
+                        <label className="font-medium">
+                          Square Ft: <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          name="squareFt"
+                          value={formData.squareFt}
+                          onChange={handleChanges}
+                          type="number"
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                          placeholder="Size (sqft)"
+                        />
+                      </div>
+
+                      <div className="md:col-span-4 col-span-12">
+                        <label className="font-medium">Beds:</label>
+                        <input
+                          name="beds"
+                          value={formData.beds}
+                          onChange={handleChanges}
+                          type="number"
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                          placeholder="Number of Beds"
+                        />
+                      </div>
+
+                      <div className="md:col-span-4 col-span-12">
+                        <label className="font-medium">Baths:</label>
+                        <input
+                          name="baths"
+                          value={formData.baths}
+                          onChange={handleChanges}
+                          type="number"
+                          className="form-input border !border-gray-500 dark:!border-gray-800 mt-2"
+                          placeholder="Number of Baths"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ---------------- STEP 7: PHOTOS / VIDEO ---------------- */}
+                  {currentStep === 7 && (
+                    <div className="grid grid-cols-12 gap-5">
+                      <div className="col-span-12">
+                        <h6 className="text-base font-semibold text-green-600 mb-1">📸 Add photos & video</h6>
+                        <p className="text-sm text-slate-400 mb-3">
+                          Listings with photos get far more responses. Upload at least one photo.
+                        </p>
+
+                        {previewUrls.length > 0 ? (
+                          <div className="grid grid-cols-3 gap-2">
+                            {files.map((file, idx) => (
+                              <div key={idx} className="relative">
+                                {file.type.startsWith("video/") ? (
+                                  <div className="w-[100px] h-[100px] flex items-center justify-center bg-gray-100 dark:bg-slate-800 rounded text-2xl">
+                                    🎥
+                                  </div>
+                                ) : (
+                                  <Image
+                                    src={previewUrls[idx]}
+                                    alt={`Preview ${idx}`}
+                                    width={100}
+                                    height={100}
+                                    className="object-cover rounded"
+                                  />
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => removeFile(idx)}
+                                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="preview-box flex justify-center items-center rounded-md shadow-sm dark:shadow-gray-800 overflow-hidden bg-gray-50 dark:bg-slate-800 text-slate-400 p-4 text-center small w-full max-h-60">
+                            Supports JPG, PNG, MP4. Max file size: 10MB.
+                          </div>
+                        )}
+
+                        <input
+                          type="file"
+                          id="images"
+                          name="images"
+                          accept="image/*,video/*"
+                          multiple
+                          onChange={handleFileChange}
+                          hidden
+                        />
+                        <label
+                          htmlFor="images"
+                          className="btn-upload btn bg-green-600 hover:bg-green-700 border-green-600 hover:border-green-700 text-white rounded-md mt-6 cursor-pointer inline-block"
+                        >
+                          Upload Photos / Video
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ---------------- STEP 8: PUBLISH / REVIEW ---------------- */}
+                  {currentStep === 8 && (
+                    <div className="grid grid-cols-12 gap-5">
+                      <div className="col-span-12">
+                        <h6 className="text-base font-semibold text-green-600 mb-1">✅ Review & Publish</h6>
+                        <p className="text-sm text-slate-400 mb-3">
+                          Please review the details below before publishing.
+                        </p>
+                      </div>
+
+                      <div className="col-span-12 bg-gray-50 dark:bg-slate-800 rounded-md p-4 space-y-2 text-sm">
+                        <p>
+                          <span className="font-semibold">Listed as:</span> {formData.listingType || "-"}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Name:</span> {formData.contactName || "-"} &nbsp;|&nbsp;
+                          <span className="font-semibold"> Mobile:</span> {formData.contactNumber || "-"}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Location:</span>{" "}
+                          {[formData.area, formData.city, formData.state, formData.country]
+                            .filter(Boolean)
+                            .join(", ") || "-"}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Listing:</span> {formData.propertyFor || "-"}{" "}
+                          {formData.priceFor ? `(${formData.priceFor})` : ""}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Title:</span> {formData.title || "-"}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Type:</span> {formData.propertyType || "-"}{" "}
+                          {formData.residentialType ? `- ${formData.residentialType}` : ""}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Price:</span>{" "}
+                          {formData.price ? `₹${formData.price}` : "-"}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Area:</span>{" "}
+                          {formData.squareFt ? `${formData.squareFt} sqft` : "-"}
+                          {formData.beds ? `, ${formData.beds} Beds` : ""}
+                          {formData.baths ? `, ${formData.baths} Baths` : ""}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Media:</span> {files.length} file(s) uploaded
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <NavButtons isLastStep={currentStep === TOTAL_STEPS} />
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Scan & Pay Modal */}
+      {showPopup && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="relative bg-white dark:bg-slate-900 rounded-xl shadow-2xl max-w-2xl w-full p-6 md:p-8">
+            <button
+              type="button"
+              onClick={() => {
+                setShowPopup(false);
+                window.location.href = redirectUrl;
+              }}
+              aria-label="Close"
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 dark:hover:text-white text-2xl leading-none"
+            >
+              &times;
+            </button>
+
+            <h5 className="text-xl font-bold text-center text-slate-900 dark:text-white mb-6">
+              Scan &amp; Pay to Book This Property
+            </h5>
+
+            <div className="grid md:grid-cols-2 grid-cols-1 gap-6 items-center">
+              <div className="flex flex-col items-center">
+                <div className="w-full max-w-[220px] rounded-2xl border-2 border-blue-800 overflow-hidden shadow-sm bg-white">
+                  <div className="bg-blue-900 text-white text-center py-1.5">
+                    <p className="text-[11px] font-bold tracking-wide">101 ACRES.COM</p>
+                  </div>
+                  <p className="text-center text-[10px] font-semibold text-slate-700 py-1 border-b border-dashed border-gray-300">
+                    SCAN &amp; PAY
+                  </p>
+                  <div className="flex justify-center p-3">
+                    <Image
+                      src={qrCodeUrl}
+                      alt="Scan & Pay QR Code"
+                      width={160}
+                      height={160}
+                      unoptimized
+                      className="rounded"
+                    />
+                  </div>
+                  <div className="bg-orange-500 text-white text-center py-1">
+                    <p className="text-[11px] font-bold tracking-wide">BHIM · UPI</p>
+                  </div>
+                </div>
+                <p className="text-green-600 font-medium mt-3 text-sm break-all text-center">
+                  UPI ID: {PAYMENT_DETAILS.upiId}
+                </p>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4 space-y-2 text-sm">
+                <p>
+                  <span className="font-semibold">Account Name:</span> {PAYMENT_DETAILS.accountName}
+                </p>
+                <p>
+                  <span className="font-semibold">Account Number:</span> {PAYMENT_DETAILS.accountNumber}
+                </p>
+                <p>
+                  <span className="font-semibold">Bank:</span> {PAYMENT_DETAILS.bankName}
+                </p>
+                <p>
+                  <span className="font-semibold">IFSC Code:</span> {PAYMENT_DETAILS.ifscCode}
+                </p>
+                <p>
+                  <span className="font-semibold">Branch:</span> {PAYMENT_DETAILS.branch}
+                </p>
+              </div>
+            </div>
+
+            <div className="text-center mt-6">
+              <h6 className="font-semibold text-slate-900 dark:text-white mb-2">Share Screenshot of Payment</h6>
+              <p className="bg-green-600 text-white rounded-md py-2 px-3 inline-block text-sm mb-3">
+                After payment, please share the screenshot on WhatsApp to:
+              </p>
+              <div>
+                <a
+                  href={whatsappShareUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white rounded-md px-4 py-2 font-medium"
+                >
+                  📞 +{PAYMENT_DETAILS.whatsappNumber.replace(/^91/, "91 ")}
+                </a>
+              </div>
+
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPopup(false);
+                    window.location.href = redirectUrl;
+                  }}
+                  className="btn bg-slate-600 hover:bg-slate-700 text-white rounded-md px-4 py-2"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </Wrapper>
+  );
+}

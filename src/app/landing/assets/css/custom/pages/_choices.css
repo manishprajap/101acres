@@ -1,0 +1,128 @@
+/*********************************/
+/*           Choices             */
+/*===============================*/
+.filter-search-form {
+    .icons {
+        @apply absolute top-[48%] -translate-y-1/2 start-3 z-1 text-green-600 text-[20px];
+    }
+    /* .filter-input-box
+        @apply bg-gray-50 dark:!bg-slate-800;
+    } */
+}
+.registration-form {
+    @apply relative;
+    .submit-btn {
+        @apply rounded-lg;
+    }
+    .form-input,
+    .choices[data-type*=select-one] .choices__inner {
+        @apply rounded-lg;
+    }
+}
+
+@media (min-width:992px) {
+    .filter-border {
+        @apply before:content-[''] before:absolute before:top-[10px] before:end-0 before:h-10 before:z-1 before:border-r before:border-gray-200 dark:before:border-gray-700 before:rounded-md before:outline-0;
+    }
+    .registration-form {
+        @apply relative;
+        .submit-btn {
+            @apply rounded-t-none rounded-e-sm rounded-b-sm rounded-s-none;
+        }
+        .form-input {
+            @apply rounded-t-sm rounded-e-none rounded-b-none rounded-s-sm outline-0;
+        }
+        .choices[data-type*=select-one] .choices__inner {
+            @apply rounded-none;
+        }
+    }
+}
+
+.filter-input-box,
+.filter-input-box.form-select,
+.filter-search-form .choices__inner {
+    @apply shadow-none border-0 rounded-none text-[15px] h-[60px] pt-[13px] pe-[6px] pb-[15px] ps-[45px] rtl:text-right;
+}
+
+.choices__inner {
+    @apply bg-gray-50 dark:bg-slate-800;
+}
+
+.choices__list--dropdown,
+.choices[data-type*=select-one] .choices__input {
+    @apply bg-white dark:bg-slate-900 border-0 rounded-[5px] shadow-sm dark:shadow-gray-800 z-999;
+}
+
+.choices__list--dropdown .choices__item--selectable.is-highlighted {
+    @apply bg-gray-50 dark:bg-slate-800 text-slate-900 dark:text-white;
+}
+
+.choices__list,
+.choices__list--dropdown .choices__item--selectable {
+    @apply text-slate-400;
+}
+
+.choices__list--dropdown, 
+.choices__list[aria-expanded] {
+    @apply border-0 z-2;
+}
+
+.choices[data-type*=select-one] {
+    @apply after:border-0 after:top-5 after:end-7 after:start-auto after:text-slate-900 dark:after:text-white;
+    &:after {
+        content: "\f0140" !important;
+        font-family: "Material Design Icons";
+    }
+}
+.choices__list--dropdown .choices__item--selectable.is-highlighted, .choices__list[aria-expanded] .choices__item--selectable.is-highlighted {
+    @apply dark:!bg-gray-800;
+}
+
+
+
+.css-13cymwt-control{
+    border-color: transparent !important;
+    border-style: none !important;
+    --tw-bg-opacity: 1;
+    background-color: rgb(249 250 251 / var(--tw-bg-opacity)) !important;
+  }
+  :is(.dark .css-13cymwt-control){
+    --tw-bg-opacity: 1;
+    background-color: rgb(30 41 59 / var(--tw-bg-opacity)) !important;
+  }
+  
+  .css-t3ipsp-control {
+    border-color: transparent !important;
+    --tw-bg-opacity: 1;
+    background-color: rgb(249 250 251 / var(--tw-bg-opacity)) !important;
+  }
+  
+  :is(.dark .css-t3ipsp-control){
+    --tw-bg-opacity: 1;
+    background-color: rgb(30 41 59 / var(--tw-bg-opacity)) !important;
+  }
+  
+  .css-1u9des2-indicatorSeparator{
+    display: none !important;
+  }
+  
+  .css-1fdsijx-ValueContainer{
+    padding: 0px !important;
+  }
+  
+  .css-qbdosj-Input {
+    margin: 0 !important;
+    padding: 0px !important;
+  }
+  
+  .css-13cymwt-control:hover,
+  .css-13cymwt-control:focus,
+  .css-t3ipsp-control:hover,
+  .css-t3ipsp-control:focus{
+    border-color: transparent !important;
+    border-style: none !important;
+    --tw-shadow: 0 0 #0000 !important;
+    --tw-shadow-colored: 0 0 #0000 !important;
+    -webkit-box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow) !important;
+            box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow) !important;
+  }

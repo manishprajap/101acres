@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1783068112519,
+      "tag": "0000_futuristic_killer_shrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1790686098586,
+      "tag": "0001_property_form_data",
+      "breakpoints": true
+    }
+  ]
+}

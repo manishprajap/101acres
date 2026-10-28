@@ -1,0 +1,47 @@
+/*********************************/
+/*         Testimonial           */
+/*===============================*/
+
+.tns-nav {
+    @apply text-center mt-3;
+    button {
+        @apply rounded-[3px] bg-green-600/30 duration-500 border-0 m-1 p-[5px];
+        &.tns-nav-active {
+            @apply bg-green-600 rotate-[45deg];
+        }
+    }
+}
+
+/* Tns control */
+.tns-controls {
+    button[data-controls="prev"],
+    button[data-controls="next"] {
+        @apply absolute top-2/4 -translate-y-2/4 text-base size-8 rounded-full bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-0 duration-500 z-10 shadow-md shadow-gray-200 dark:shadow-gray-700;
+
+        &:hover {
+            @apply bg-green-600 text-white;
+        }
+    }
+    button[data-controls="prev"] {
+        @apply start-0;
+    }
+    button[data-controls="next"] {
+        @apply end-0;
+    }
+}
+
+
+/* Smoth Slider */
+
+
+/* RTL */
+html[dir="rtl"]{
+    .tns-inner, .tns-nav, .slider, .slider2, .swiper-slider-hero {
+        direction: ltr !important;
+    }
+
+    .tns-visually-hidden {
+        left: 0 !important;
+        visibility: hidden;
+    }
+}
